@@ -50,3 +50,14 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+.clang/
+.codelite/
+avcp.cbp
+avcp.depend
+avcp.layout
+avcp.mk
+avcp.project
+avcp.txt
+avcp.workspace
+bin/
