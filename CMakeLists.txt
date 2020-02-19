@@ -8,9 +8,9 @@ include_directories(.)
 
 add_executable(avcp
     avcp.c avcp.h
-    argtable3.c argtable3.h)
+    argtable3.c argtable3.h filemediainfo.c filemediainfo.h)
 
-target_link_libraries( avcp m dl mediainfo )
+target_link_libraries( avcp m dl avcodec avformat avutil )
 
 set( CMAKE_INSTALL_PREFIX /usr )
 install( TARGETS avcp )

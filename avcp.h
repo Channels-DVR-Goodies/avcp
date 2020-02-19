@@ -12,7 +12,7 @@
 #define debugf( format, ... ) _debugf( __FILE__, __LINE__, format, ## __VA_ARGS__ )
 
 #define _errorf( errorNum, errorMsg, format, ... )  \
-		 fprintf( stderr, format " (%d: %s)\n", ## __VA_ARGS__, errorNum, errorMsg )
+		 fprintf( stderr, "### Error: " format " (%d: %s)\n", ## __VA_ARGS__, errorNum, errorMsg )
 #define errorf( format, ... ) _errorf( errno, strerror(errno), format, ## __VA_ARGS__ )
 
 #endif //AVCP_AVCP_H
