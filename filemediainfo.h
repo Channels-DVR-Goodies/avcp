@@ -45,23 +45,26 @@ typedef enum {
 } tFrameOrientation;
 
 typedef enum {
-    languageUnknown,
     languageEnglish,
     languageFrench,
     languageSpanish,
     languageGerman,
-    languageMax
+    languageUnknown
 } tLanguage;
 
 typedef struct fileInfo
 {
     struct fileInfo * next;
     const char      * name;
+    struct timespec   duration;
     struct stat       stat;
 
     struct {
-        const char *  shortName;    ///> abbreviated name
-        const char *  longName;     ///> friendly name
+        struct
+        {
+            const char * brief;    ///> abbreviated name
+            const char * full;     ///> friendly name
+        } name;
         unsigned long duration;     ///> in seconds
         unsigned long bitrate;      ///> in bits per second
         unsigned int  streamCount;
@@ -90,16 +93,19 @@ typedef struct fileInfo
     struct {
         const char * shortName;     ///> abbreviated name
         const char * longName;      ///> friendly name
-        int streamIndex;
-        int streamCount;
+        int           streamIndex;
+        int           streamCount;
         unsigned long bitrate;      ///> in bits per second
-        unsigned long samplerate;   ///> in frames per second
-        unsigned int  sampleLength;
-
+        tLanguage     language;     ///> natural language
+        struct
+        {
+            unsigned long rate;   ///> in frames per second
+            unsigned int  length;
+        } sample;
         struct {
             int            count;
             tChannelLayout layout;
-        } channel;
+        }             channel;
     } audio;
 
 } tFileInfo;

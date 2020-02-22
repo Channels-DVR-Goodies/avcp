@@ -59,11 +59,11 @@ const char * orientationNames[] =
 
 const char * languageNames[] =
                    {
-                           [languageUnknown] = "(unknown)",
                            [languageEnglish] = "English",
                            [languageFrench]  = "Francais",
                            [languageSpanish] = "Espanol",
-                           [languageGerman]  = "Deutsch"
+                           [languageGerman]  = "Deutsch",
+                           [languageUnknown] = "(unknown)"
                    };
 
 const char * languageKeys[] =
@@ -72,7 +72,7 @@ const char * languageKeys[] =
                            [languageFrench]  = "fra",
                            [languageSpanish] = "spa",
                            [languageGerman]  = "ger",
-                           [languageMax]     = NULL
+                           [languageUnknown] = NULL
                    };
 
 
@@ -92,7 +92,7 @@ void printMediaInfo( tFileInfo * file )
 {
     if ( file->container.streamCount == 0 )
     {
-        printf( "%40c %s\n", ' ', file->name );
+        printf( "%58c %s\n", ' ', file->name );
     }
     else
     {
@@ -130,13 +130,22 @@ void printMediaInfo( tFileInfo * file )
             snprintf( fpsStr, sizeof( fpsStr ), "%u.%u%c", integer, fraction, scanType );
         }
 
-        printf( "%-5.5s %4u x %-4u @ %-7s %-5.5s %-6s %s\n",
+        unsigned int hours, minutes, seconds;
+        seconds = file->container.duration % 60;
+        minutes = (file->container.duration / 60) % 60;
+        hours   = file->container.duration / (60 * 60);
+        printf( "%2u:%02u:%02u %6.3f  %-5.5s %4u x %-4u @ %-7s %-5.5s %-6s %-8.8s  %s\n",
+                hours, minutes, seconds,
+                file->container.bitrate / (float)1000000,
                 file->video.codec.shortName,
                 file->video.width,
                 file->video.height,
                 fpsStr,
                 file->audio.shortName,
                 layoutNames[ file->audio.channel.layout ],
+                languageNames[ file->audio.language ],
+                /* file->duration.tv_sec,
+                   file->duration.tv_nsec/1000, */
                 file->name );
     }
 }
@@ -152,8 +161,8 @@ void dumpMediaInfo( tFileInfo * file )
         debugf( "_______________________" );
         debugf( "Container" );
 
-        debugf( "%12s: %s",  "format",    file->container.shortName );
-        debugf( "%12s: %s",  "long name", file->container.longName );
+        debugf( "%12s: %s",  "format",    file->container.name.brief );
+        debugf( "%12s: %s",  "long name", file->container.name.full );
         debugf( "%12s: %lu", "bitrate",   file->container.bitrate );
         debugf( "%12s: %lu", "duration",  file->container.duration );
         debugf( "%12s: %u",  "chapters",  file->container.chapterCount );
@@ -194,8 +203,8 @@ void dumpMediaInfo( tFileInfo * file )
         debugf( "%12s: %s", "codec", file->audio.shortName );
         debugf( "%12s: %s", "long name", file->audio.longName );
         debugf( "%12s: %lu", "bitrate", file->audio.bitrate );
-        debugf( "%12s: %lu Hz", "sample rate", file->audio.samplerate );
-        debugf( "%12s: %u", "sample bits", file->audio.sampleLength );
+        debugf( "%12s: %lu Hz", "sample rate", file->audio.sample.rate );
+        debugf( "%12s: %u", "sample bits", file->audio.sample.length );
         debugf( "%12s: %d", "channels", file->audio.channel.count );
         debugf( "%12s: %s", "layout", layoutNames[ file->audio.channel.layout ] );
     }
@@ -247,8 +256,8 @@ int processMediaInfo( tFileInfo * file )
 
                 if ( formatContext->iformat != NULL)
                 {
-                    file->container.shortName = formatContext->iformat->name;
-                    file->container.longName  = formatContext->iformat->long_name;
+                    file->container.name.brief = formatContext->iformat->name;
+                    file->container.name.full  = formatContext->iformat->long_name;
                 }
 
                 for ( unsigned int i = 0; i < AVMEDIA_TYPE_NB; ++i )
@@ -383,7 +392,16 @@ int processMediaInfo( tFileInfo * file )
                                                             "language", NULL, 0 );
                     if ( lang != NULL)
                     {
-                        //debugf( "%12s: %s", "language", lang->value );
+                        int i = 0;
+                        while ( languageKeys[i] != NULL )
+                        {
+                            if ( strcasecmp( languageKeys[i], lang->value ) == 0)
+                            {
+                                file->audio.language = (tLanguage)i;
+                                break;
+                            }
+                            i++;
+                        }
                     }
 
                     AVCodecContext * audioCodecContext = avcodec_alloc_context3( audioDecoder );
@@ -391,8 +409,8 @@ int processMediaInfo( tFileInfo * file )
                     if ( ret >= 0 )
                     {
                         file->audio.bitrate       = audioCodecContext->bit_rate;
-                        file->audio.samplerate    = audioCodecContext->sample_rate;
-                        file->audio.sampleLength  = 8 * av_get_bytes_per_sample( audioCodecContext->sample_fmt);
+                        file->audio.sample.rate   = audioCodecContext->sample_rate;
+                        file->audio.sample.length = 8 * av_get_bytes_per_sample( audioCodecContext->sample_fmt);
                         file->audio.channel.count = audioCodecContext->channels;
 
                         switch ( audioCodecContext->channel_layout )

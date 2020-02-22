@@ -8,18 +8,13 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-//#include <stdarg.h>
 #include <limits.h>
-//#include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
 #include <strings.h>
-//#include <ctype.h>
-//#include <math.h>
+#include <time.h>
 #include <errno.h>
 #include <unistd.h>
-//#include <sys/param.h>
-//#include <dlfcn.h>
 #include <libgen.h>
 
 #include "argtable3.h"  /* used to parse command line options */
@@ -32,10 +27,8 @@ const char * gExecutableName;
 static tFileInfo * gFileInfoRoot = NULL;
 static tFileInfo * gTarget       = NULL;
 
-
 /* global arg_xxx structs */
-struct
-{
+struct {
     const char * myName;
     struct arg_lit  * help;
     struct arg_lit  * version;
@@ -45,73 +38,6 @@ struct
     struct arg_file * file;
     struct arg_end  * end;
 } gOption;
-
-#if 0
-static int openCodecContext( int * streamIndexResult,
-                             AVCodecContext ** decodeContext,
-                             AVFormatContext * formatContext,
-                             enum AVMediaType mediaType )
-{
-	int result, streamIndex;
-	AVStream     * stream;
-	AVCodec      * decodec = NULL;
-	AVDictionary * options = NULL;
-	const char   * mediaTypeAsString;
-
-	mediaTypeAsString = av_get_media_type_string( mediaType );
-
-	result = av_find_best_stream( formatContext, mediaType, -1, -1, NULL, 0 );
-	if ( result < 0 )
-	{
-		fprintf( stderr, "Could not find %s stream\n", mediaTypeAsString );
-	}
-	else
-	{
-		streamIndex = result;
-		debugf( "%s stream is index %d", mediaTypeAsString, streamIndex );
-
-		stream  = formatContext->streams[streamIndex];
-		/* find decoder for the stream */
-		decodec = avcodec_find_decoder( stream->codecpar->codec_id );
-		if ( decodec == NULL)
-		{
-			fprintf( stderr, "Failed to find %s codec\n", mediaTypeAsString );
-			result = AVERROR( EINVAL );
-		}
-		else
-		{
-			/* Allocate a codec context for the decoder */
-			*decodeContext = avcodec_alloc_context3( decodec );
-			if ( *decodeContext == NULL)
-			{
-				errorf( "Failed to allocate a context for the %s codec\n", mediaTypeAsString );
-				result = AVERROR( ENOMEM );
-			}
-			else
-			{
-				/* Copy codec parameters from input stream to output codec context */
-				result = avcodec_parameters_to_context( *decodeContext, stream->codecpar );
-				if ( result < 0 )
-				{
-					errorf( "Failed to copy %s codec parameters to decoder context\n", mediaTypeAsString );
-				}
-				else
-				{
-					/* Init the decoders, without reference counting */
-					av_dict_set( &options, "refcounted_frames", "0", 0 );
-					result = avcodec_open2( *decodeContext, decodec, &options );
-					if ( result < 0 )
-					{
-						errorf( "Failed to open %s codec\n", mediaTypeAsString );
-					}
-					*streamIndexResult = streamIndex;
-				}
-			}
-		}
-	}
-	return result;
-}
-#endif
 
 /**
  * @brief recurive function that creates any missing directories in the path provided
@@ -199,91 +125,18 @@ int checkTarget( const char * filename )
     return result;
 }
 
-#if 0
-void dump_stream_format( AVFormatContext * formatContext, int streamIdx )
-{
-    int ret;
-
-    debugf( "" );
-    debugf( "Stream #%d", streamIdx );
-
-    AVStream * streamContext = formatContext->streams[streamIdx];
-
-    AVDictionaryEntry * lang = av_dict_get( streamContext->metadata, "language", NULL, 0 );
-    if ( lang )
-    {
-        debugf( "lang: %s", lang->value );
-    }
-
-    AVCodecContext * codecContext = avcodec_alloc_context3(NULL);
-    if ( codecContext != NULL )
-    {
-        ret = avcodec_parameters_to_context( codecContext, streamContext->codecpar );
-        if ( ret >= 0 )
-        {
-            const char * profile    = avcodec_profile_name( codecContext->codec_id, codecContext->profile );
-
-            if (profile != NULL)
-            {
-                debugf( "   profile: %s", profile );
-            }
-            switch ( codecContext->codec_type )
-            {
-            case AVMEDIA_TYPE_VIDEO:
-                debugf( "%dx%d", codecContext->width, codecContext->height );
-                if ( codecContext->coded_width != 0 )
-                {
-                    debugf( "Coded: %dx%d", codecContext->coded_width, codecContext->coded_height );
-                }
-                int fps = streamContext->avg_frame_rate.den && streamContext->avg_frame_rate.num;
-                if ( fps )
-                {
-                    print_fps( av_q2d( streamContext->avg_frame_rate ), "fps" );
-                }
-                break;
-
-            case AVMEDIA_TYPE_AUDIO:
-                debugf( "%d Hz", codecContext->sample_rate );
-                break;
-
-            default:
-                break;
-            }
-
-//            avcodec_string( buf, sizeof( buf ), codecContext, 0 );
-        }
-
-        avcodec_free_context( &codecContext );
-    }
-
-
-//    debugf( ">>> %s", buf );
-
-/*    if ( st->sample_aspect_ratio.num &&
-         av_cmp_q( st->sample_aspect_ratio, st->codecpar->sample_aspect_ratio ))
-    {
-        AVRational display_aspect_ratio;
-        av_reduce( &display_aspect_ratio.num, &display_aspect_ratio.den,
-                   st->codecpar->width * (int64_t) st->sample_aspect_ratio.num,
-                   st->codecpar->height * (int64_t) st->sample_aspect_ratio.den,
-                   1024 * 1024 );
-        debugf( "SAR %d:%d DAR %d:%d",
-               st->sample_aspect_ratio.num, st->sample_aspect_ratio.den,
-               display_aspect_ratio.num, display_aspect_ratio.den );
-    }
-    */
-}
-#endif
 
 int processFile( const char * filename )
 {
     int result = -1;
-    //fprintf(stderr,"-----\n");
-    //debugf( "filename: \'%s\'", filename );
+
+    struct timespec start, stop;
 
     tFileInfo * file = calloc( 1, sizeof(tFileInfo) );
     if ( file != NULL )
     {
+        clock_gettime( CLOCK_REALTIME, &start );
+
         file->next = NULL;
         file->name = filename;
         if ( stat( filename, &file->stat ) == 0 )
@@ -292,7 +145,7 @@ int processFile( const char * filename )
         }
         else
         {
-            switch (errno)
+            switch ( errno )
             {
             case ENOENT:
                 errorf( "file \'%s\' is missing\n", filename );
@@ -305,22 +158,42 @@ int processFile( const char * filename )
             }
         }
 
-        if ( S_ISREG(file->stat.st_mode ) )
+        if ( S_ISREG( file->stat.st_mode ))
         {
             processMediaInfo( file );
-            printMediaInfo( file );
+            // printMediaInfo( file );
             // dumpMediaInfo( file );
 
             tFileInfo * p = gFileInfoRoot;
-            while ( p != NULL && p->next != NULL )
+            if ( p == NULL)
             {
-                p = p->next;
+                gFileInfoRoot = file;
             }
-            if ( p != NULL )
+            else
             {
-                p->next = file;
+                while ( p != NULL && p->next != NULL)
+                {
+                    p = p->next;
+                }
+                if ( p != NULL)
+                {
+                    p->next = file;
+                }
             }
         }
+
+        clock_gettime( CLOCK_REALTIME, &stop );
+        if ( stop.tv_nsec < start.tv_nsec )
+        {
+            /* add a second to the nano part */
+            stop.tv_nsec += 1000000000;
+            /* and subtract it from the seconds part */
+            /* we only get here if stop.tv_nsec > start.tv_nsec */
+            stop.tv_sec  -= 1;
+        }
+
+        file->duration.tv_nsec = stop.tv_nsec - start.tv_nsec;
+        file->duration.tv_sec  = stop.tv_sec  - start.tv_sec;
     }
     return result;
 }
@@ -341,20 +214,21 @@ int main( int argc, char *argv[] )
     /* the global arg_xxx structs above are statically initialised within argtable */
     void * argtable[] =
     {
-        gOption.help    = arg_litn( NULL, "help", 0, 1, "display this help (and exit)" ),
+        gOption.help = arg_litn(NULL, "help", 0, 1, "display this help (and exit)" ),
 
-        gOption.version = arg_litn( NULL, "version", 0, 1, "display version info (and exit)" ),
+        gOption.version = arg_litn(NULL, "version", 0, 1, "display version info (and exit)" ),
 
-        gOption.delete  = arg_litn( "l", "link", 0, 1, "hard-link the files, instead of copying them." ),
+        gOption.delete = arg_litn( "l", "link", 0, 1, "hard-link the files, instead of copying them." ),
 
-        gOption.target  = arg_filen( "t", "target", "<file>", 0, 1, "specify a destination file." ),
+        gOption.target = arg_filen( "t", "target", "<file>", 0, 1,
+                                    "specify a destination file." ),
 
-        gOption.config  = arg_filen( "c", "config", "<config file>", 0, 1,
-							         "the configuration file controls what is considered 'better' quality." ),
+        gOption.config = arg_filen( "c", "config", "<config file>", 0, 1,
+                                    "the configuration file controls what is considered 'better' quality." ),
 
-        gOption.file    = arg_filen( NULL, NULL, "<file>", 1, 999, "input files" ),
+        gOption.file = arg_filen(NULL, NULL, "<file>", 1, 999, "input files" ),
 
-        gOption.end     = arg_end( 20 )
+        gOption.end = arg_end( 20 )
     };
 
     int nerrors = arg_parse( argc, argv, argtable );
@@ -404,6 +278,15 @@ int main( int argc, char *argv[] )
         for ( int i = 0; i < count && result == 0; i++ )
         {
             result = processFile( gOption.file->filename[i] );
+        }
+
+        tFileInfo * file = gFileInfoRoot;
+        while ( file != NULL )
+        {
+            printMediaInfo( file );
+            // dumpMediaInfo( file );
+
+            file = file->next;
         }
     }
 
