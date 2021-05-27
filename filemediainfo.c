@@ -79,7 +79,7 @@ const char * languageKeys[] =
 int initMediaInfo( void )
 {
     // initialise libavformat
-    av_register_all();
+    // deprecated: av_register_all();
 
     // Left at the default log level, there's a lot of 'noise' from probing files that otherwise seem
     // OK. AV_LOG_FATAL seems to be the minimum level required to suppress it being sent to stderr.
@@ -90,7 +90,7 @@ int initMediaInfo( void )
 
 void printMediaInfo( tFileInfo * file )
 {
-    if ( file->container.streamCount == 0 )
+    if ( file->container.stream.count == 0 )
     {
         printf( "%58c %s\n", ' ', file->name );
     }
@@ -137,11 +137,11 @@ void printMediaInfo( tFileInfo * file )
         printf( "%2u:%02u:%02u %6.3f  %-5.5s %4u x %-4u @ %-7s %-5.5s %-6s %-8.8s  %s\n",
                 hours, minutes, seconds,
                 file->container.bitrate / (float)1000000,
-                file->video.codec.shortName,
+                file->video.codec.name.brief,
                 file->video.width,
                 file->video.height,
                 fpsStr,
-                file->audio.shortName,
+                file->audio.codec.name.brief,
                 layoutNames[ file->audio.channel.layout ],
                 languageNames[ file->audio.language ],
                 /* file->duration.tv_sec,
@@ -152,7 +152,7 @@ void printMediaInfo( tFileInfo * file )
 
 void dumpMediaInfo( tFileInfo * file )
 {
-    if ( file->container.streamCount == 0 )
+    if ( file->container.stream.count == 0 )
     {
         debugf( "### not a media file" );
     }
@@ -165,16 +165,16 @@ void dumpMediaInfo( tFileInfo * file )
         debugf( "%12s: %s",  "long name", file->container.name.full );
         debugf( "%12s: %lu", "bitrate",   file->container.bitrate );
         debugf( "%12s: %lu", "duration",  file->container.duration );
-        debugf( "%12s: %u",  "chapters",  file->container.chapterCount );
-        debugf( "%12s: %u",  "streams",   file->container.streamCount );
+        debugf( "%12s: %u",  "chapters",  file->container.chapter.count );
+        debugf( "%12s: %u",  "streams",   file->container.stream.count );
 
         debugf( "_______________________" );
         debugf( "Video" );
 
         debugf( "%12s: %d", "stream",    file->video.streamIndex );
         debugf( "%12s: %u", "count",     file->video.streamCount );
-        debugf( "%12s: %s", "codec",     file->video.codec.shortName );
-        debugf( "%12s: %s", "long name", file->video.codec.longName );
+        debugf( "%12s: %s", "codec",     file->video.codec.name.brief );
+        debugf( "%12s: %s", "long name", file->video.codec.name.full );
 
         debugf( "%12s: %s @ %d.%d", "profile", profileNames[ file->video.codec.profile ],
                 file->video.codec.level / 10, file->video.codec.level % 10 );
@@ -200,8 +200,8 @@ void dumpMediaInfo( tFileInfo * file )
 
         debugf( "%12s: %d", "stream", file->audio.streamIndex );
         debugf( "%12s: %d", "count", file->audio.streamCount );
-        debugf( "%12s: %s", "codec", file->audio.shortName );
-        debugf( "%12s: %s", "long name", file->audio.longName );
+        debugf( "%12s: %s", "codec", file->audio.codec.name.brief );
+        debugf( "%12s: %s", "long name", file->audio.codec.name.full );
         debugf( "%12s: %lu", "bitrate", file->audio.bitrate );
         debugf( "%12s: %lu Hz", "sample rate", file->audio.sample.rate );
         debugf( "%12s: %u", "sample bits", file->audio.sample.length );
@@ -249,10 +249,10 @@ int processMediaInfo( tFileInfo * file )
             }
             else
             {
-                file->container.streamCount  = formatContext->nb_streams;
-                file->container.chapterCount = formatContext->nb_chapters;
-                file->container.bitrate      = formatContext->bit_rate;
-                file->container.duration     = formatContext->duration / AV_TIME_BASE;
+                file->container.stream.count  = formatContext->nb_streams;
+                file->container.chapter.count = formatContext->nb_chapters;
+                file->container.bitrate       = formatContext->bit_rate;
+                file->container.duration      = formatContext->duration / AV_TIME_BASE;
 
                 if ( formatContext->iformat != NULL)
                 {
@@ -290,8 +290,8 @@ int processMediaInfo( tFileInfo * file )
 
                 if ( videoDecoder != NULL && videoStreamContext != NULL)
                 {
-                    file->video.codec.shortName = videoDecoder->name;
-                    file->video.codec.longName  = videoDecoder->long_name;
+                    file->video.codec.name.brief = videoDecoder->name;
+                    file->video.codec.name.full  = videoDecoder->long_name;
 
                     AVCodecContext * videoCodecContext = avcodec_alloc_context3( videoDecoder );
                     if ( videoCodecContext != NULL)
@@ -301,13 +301,24 @@ int processMediaInfo( tFileInfo * file )
                         {
                             file->video.bitrate = videoCodecContext->bit_rate;
 
-                            file->video.codec.ID = videoCodecContext->codec_id;
+                            /* map a subset of the AV_CODEC_IDs to an enum ordered by preference */
+                            switch ( videoCodecContext->codec_id )
+                            {
+                                 /* aka H.265 */
+                            case AV_CODEC_ID_HEVC:       file->video.codec.id = videoCodecH265; break;
+                                /* aka AVC, MPEG-4 Part 10 */
+                            case AV_CODEC_ID_H264:       file->video.codec.id = videoCodecH264; break;
+                            case AV_CODEC_ID_MPEG4:      file->video.codec.id = videoCodecMPEG4; break;
+                            case AV_CODEC_ID_MPEG2VIDEO: file->video.codec.id = videoCodecMPEG2; break;
+                                /* map all the less common video codecs to 'unknown' */
+                            default: file->video.codec.id = videoCodecUnknown; break;
+                            }
 
                             file->video.codec.profile = profileLevelUknown;
 
-                            if ( file->video.codec.ID != AV_CODEC_ID_NONE )
+                            if ( videoCodecContext->codec_id != AV_CODEC_ID_NONE )
                             {
-                                const char * profileName = avcodec_profile_name( file->video.codec.ID,
+                                const char * profileName = avcodec_profile_name( videoCodecContext->codec_id,
                                                                                  videoCodecContext->profile );
                                 if ( profileName != NULL)
                                 {
@@ -338,7 +349,7 @@ int processMediaInfo( tFileInfo * file )
                                     file->video.orientation = orientationLandscape;
                                 }
                             }
-                            else if ( file->video.width < file->video.height )
+                            else /* portrait orientation is still uncommon for video, but not unknown */
                             {
                                 if ( ((file->video.height * 1000) / file->video.width) > 1500 )
                                 {
@@ -349,24 +360,12 @@ int processMediaInfo( tFileInfo * file )
                                     file->video.orientation = orientationPortrait;
                                 }
                             }
-                            else
-                            {
-                                file->video.orientation = orientationUnknown;
-                            }
 
                             switch ( videoCodecContext->field_order )
                             {
-                            case AV_FIELD_UNKNOWN:
-                                file->video.scanType = scanUnknown;
-                                break;
-
-                            case AV_FIELD_PROGRESSIVE:
-                                file->video.scanType = scanProgressive;
-                                break;
-
-                            default:
-                                file->video.scanType = scanInterlaced;
-                                break;
+                            case AV_FIELD_UNKNOWN:     file->video.scanType = scanUnknown; break;
+                            case AV_FIELD_PROGRESSIVE: file->video.scanType = scanProgressive; break;
+                            default: file->video.scanType = scanInterlaced; break;
                             }
 
                             file->video.frameRate = videoStreamContext->avg_frame_rate.num * 1000 /
@@ -385,8 +384,8 @@ int processMediaInfo( tFileInfo * file )
 
                 if ( audioDecoder != NULL && audioStreamContext != NULL)
                 {
-                    file->audio.shortName = audioDecoder->name;
-                    file->audio.longName  = audioDecoder->long_name;
+                    file->audio.codec.name.brief = audioDecoder->name;
+                    file->audio.codec.name.full  = audioDecoder->long_name;
 
                     AVDictionaryEntry * lang = av_dict_get( audioStreamContext->metadata,
                                                             "language", NULL, 0 );
@@ -408,6 +407,17 @@ int processMediaInfo( tFileInfo * file )
                     int ret = avcodec_parameters_to_context( audioCodecContext, audioStreamContext->codecpar );
                     if ( ret >= 0 )
                     {
+                        switch ( audioCodecContext->codec_id )
+                        {
+                        case AV_CODEC_ID_TRUEHD: file->audio.codec.id = audioCodecTrueHD; break;
+                        case AV_CODEC_ID_DTS:    file->audio.codec.id = audioCodecDTS; break;
+                        case AV_CODEC_ID_EAC3:   file->audio.codec.id = audioCodecEAC3; break;
+                        case AV_CODEC_ID_AC3:    file->audio.codec.id = audioCodecAC3; break;
+                        case AV_CODEC_ID_AAC:    file->audio.codec.id = audioCodecAAC; break;
+                        case AV_CODEC_ID_MP3:    file->audio.codec.id = audioCodecMP3; break;
+                        default:  file->audio.codec.id = audioCodecUnknown; break;
+                        }
+
                         file->audio.bitrate       = audioCodecContext->bit_rate;
                         file->audio.sample.rate   = audioCodecContext->sample_rate;
                         file->audio.sample.length = 8 * av_get_bytes_per_sample( audioCodecContext->sample_fmt);
@@ -415,37 +425,21 @@ int processMediaInfo( tFileInfo * file )
 
                         switch ( audioCodecContext->channel_layout )
                         {
-                        case AV_CH_LAYOUT_MONO:
-                            file->audio.channel.layout = layoutMono;
-                            break;
-
-                        case AV_CH_LAYOUT_STEREO:
-                            file->audio.channel.layout = layoutStereo;
-                            break;
-
-                        case AV_CH_LAYOUT_2_1:
-                            file->audio.channel.layout = layout2dot1;
-                            break;
+                        case AV_CH_LAYOUT_MONO:         file->audio.channel.layout = layoutMono; break;
+                        case AV_CH_LAYOUT_STEREO:       file->audio.channel.layout = layoutStereo; break;
+                        case AV_CH_LAYOUT_2_1:          file->audio.channel.layout = layout2dot1; break;
 
                         case AV_CH_LAYOUT_5POINT0:
-                        case AV_CH_LAYOUT_5POINT0_BACK:
-                            file->audio.channel.layout = layout5dot0;
-                            break;
+                        case AV_CH_LAYOUT_5POINT0_BACK: file->audio.channel.layout = layout5dot0; break;
 
                         case AV_CH_LAYOUT_5POINT1:
-                        case AV_CH_LAYOUT_5POINT1_BACK:
-                            file->audio.channel.layout = layout5dot1;
-                            break;
+                        case AV_CH_LAYOUT_5POINT1_BACK: file->audio.channel.layout = layout5dot1; break;
 
                         case AV_CH_LAYOUT_7POINT1:
                         case AV_CH_LAYOUT_7POINT1_WIDE:
-                        case AV_CH_LAYOUT_7POINT1_WIDE_BACK:
-                            file->audio.channel.layout = layout7dot1;
-                            break;
+                        case AV_CH_LAYOUT_7POINT1_WIDE_BACK: file->audio.channel.layout = layout7dot1; break;
 
-                        default:
-                            file->audio.channel.layout = layoutUnknown;
-                            break;
+                        default: file->audio.channel.layout = layoutUnknown; break;
                         }
                     }
                 }

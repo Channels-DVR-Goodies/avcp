@@ -5,6 +5,16 @@
 #ifndef AVCP_FILEMEDIAINFO_H
 #define AVCP_FILEMEDIAINFO_H
 
+
+typedef enum
+{
+    videoCodecUnknown = 0,
+    videoCodecMPEG2,
+    videoCodecMPEG4,
+    videoCodecH264,
+    videoCodecH265
+} tVideoCodec;
+
 typedef enum
 {
     frameRateUnknown,
@@ -25,6 +35,16 @@ typedef enum
     profileLevelMain,
     profileLevelHigh
 } tProfileLevel;
+
+typedef enum {
+    audioCodecUnknown = 0,
+    audioCodecMP3,      ///< AV_CODEC_ID_MP3 preferred ID for decoding MPEG audio layer 1, 2 or 3
+    audioCodecAAC,      ///< AV_CODEC_ID_AAC
+    audioCodecAC3,      ///< AV_CODEC_ID_AC3
+    audioCodecEAC3,     ///< AV_CODEC_ID_EAC3
+    audioCodecDTS,      ///< AV_CODEC_ID_DTS
+    audioCodecTrueHD    ///< AV_CODEC_ID_TRUEHD
+} tAudioCodec;
 
 typedef enum {
     layoutUnknown,
@@ -56,6 +76,9 @@ typedef struct fileInfo
 {
     struct fileInfo * next;
     const char      * name;
+
+    unsigned long     score;  /* to determine which is the 'best' file */
+
     struct timespec   duration;
     struct stat       stat;
 
@@ -67,8 +90,12 @@ typedef struct fileInfo
         } name;
         unsigned long duration;     ///> in seconds
         unsigned long bitrate;      ///> in bits per second
-        unsigned int  streamCount;
-        unsigned int  chapterCount;
+        struct {
+            unsigned int count;
+        } stream;
+        struct {
+            unsigned int count;
+        } chapter;
     } container;
 
     struct {
@@ -82,30 +109,39 @@ typedef struct fileInfo
         tFrameRateType      frameRateType;
         tScanType           scanType;
         struct {
-            int           ID;
-            const char *  shortName;    ///> abbreviated name
-            const char *  longName;     ///> friendly name
+            tVideoCodec   id;           ///> our tVideoCodec enum, remapped from AV_CODEC_ID
+            struct
+            {
+                const char * brief;    ///> abbreviated name
+                const char * full;     ///> friendly name
+            } name;
             tProfileLevel profile;
             unsigned int  level;
         } codec;
     } video;
 
     struct {
-        const char * shortName;     ///> abbreviated name
-        const char * longName;      ///> friendly name
-        int           streamIndex;
-        int           streamCount;
-        unsigned long bitrate;      ///> in bits per second
-        tLanguage     language;     ///> natural language
+        int streamIndex;
+        int streamCount;
+        unsigned long bitrate;         ///> in bits per second
+        tLanguage     language;        ///> natural language
+        struct {
+            tAudioCodec id;
+            struct
+            {
+                const char * brief;    ///> abbreviated name
+                const char * full;     ///> friendly name
+            } name;
+        } codec;
         struct
         {
-            unsigned long rate;   ///> in frames per second
+            unsigned long rate;        ///> in frames per second
             unsigned int  length;
         } sample;
         struct {
             int            count;
             tChannelLayout layout;
-        }             channel;
+        } channel;
     } audio;
 
 } tFileInfo;

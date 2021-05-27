@@ -27,11 +27,15 @@ const char * gExecutableName;
 static tFileInfo * gFileInfoRoot = NULL;
 static tFileInfo * gTarget       = NULL;
 
+typedef enum { lsmode, lnmode, cpmode } tAppMode;
+
 /* global arg_xxx structs */
 struct {
     const char * myName;
+    tAppMode     mode;
     struct arg_lit  * help;
     struct arg_lit  * version;
+    struct arg_lit  * link;
     struct arg_lit  * delete;
     struct arg_file * config;
     struct arg_file * target;
@@ -211,17 +215,29 @@ int main( int argc, char *argv[] )
         gOption.myName = argv[0];
     }
 
+    if (strcmp(gOption.myName, "avln") == 0)
+    {
+        gOption.mode = lnmode;
+    } else if ( strcmp( gOption.myName, "avcp" ) == 0 )
+    {
+        gOption.mode = cpmode;
+    } else {
+        gOption.mode = lsmode;
+    }
+
     /* the global arg_xxx structs above are statically initialised within argtable */
     void * argtable[] =
     {
-        gOption.help = arg_litn(NULL, "help", 0, 1, "display this help (and exit)" ),
+        gOption.help    = arg_litn(NULL, "help", 0, 1, "display this help (and exit)" ),
 
         gOption.version = arg_litn(NULL, "version", 0, 1, "display version info (and exit)" ),
 
-        gOption.delete = arg_litn( "l", "link", 0, 1, "hard-link the files, instead of copying them." ),
+        gOption.link    = arg_litn( "l", "link", 0, 1, "hard-link the files, instead of copying them." ),
+
+        gOption.delete  = arg_litn( "d", "delete", 0, 1, "remove the files that didn't win" ),
 
         gOption.target = arg_filen( "t", "target", "<file>", 0, 1,
-                                    "specify a destination file." ),
+                                "specify a destination file." ),
 
         gOption.config = arg_filen( "c", "config", "<config file>", 0, 1,
                                     "the configuration file controls what is considered 'better' quality." ),
@@ -258,22 +274,36 @@ int main( int argc, char *argv[] )
     }
     else
     {
+        const char * target = NULL;
         int count = gOption.file->count;
-        const char * target;
 
-        if ( gOption.target->count > 0 )
+        if ( gOption.link->count > 0 )
         {
-            /* the destination file was provided explicitly by the user */
-            target = gOption.target->filename[0];
-        }
-        else
-        {
-            /* the destination file is the last one in the list */
-            --count;
-            target = gOption.file->filename[count];
+            gOption.mode = lnmode;
         }
 
-        result = checkTarget( target );
+        /* ls mode doesn't use a target */
+        if ( gOption.mode == lsmode )
+        {
+            if ( gOption.target->count > 0 )
+            {
+                fprintf(stderr, "Error: %s- the -t option is not compatible with ls mode\n", gOption.myName);
+            }
+        } else {
+            if ( gOption.target->count > 0 )
+            {
+                /* the destination file was provided explicitly by the user */
+                target = gOption.target->filename[0];
+            }
+            else
+            {
+                /* the destination file is the last one in the list */
+                --count;
+                target = gOption.file->filename[count];
+            }
+
+            result = checkTarget( target );
+        }
 
         for ( int i = 0; i < count && result == 0; i++ )
         {
@@ -281,12 +311,19 @@ int main( int argc, char *argv[] )
         }
 
         tFileInfo * file = gFileInfoRoot;
-        while ( file != NULL )
+        if (gOption.mode == lsmode )
         {
-            printMediaInfo( file );
-            // dumpMediaInfo( file );
+            while ( file != NULL)
+            {
+                printMediaInfo( file );
+                // dumpMediaInfo( file );
 
-            file = file->next;
+                file = file->next;
+            }
+        }
+        else
+        {
+            /* cpmode and lnmode only differ in the linking vs. copying choice */
         }
     }
 
